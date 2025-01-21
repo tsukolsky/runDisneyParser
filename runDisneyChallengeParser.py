@@ -122,10 +122,12 @@ class GoofyParticipant(Partcipant):
             for x in range(0,4):
                 timeList.append('0:0:0')
 
-        numSec = self.ConvertToSeconds(timeList[-1])
-        individualResult[FULL] = numSec
-        numSec = self.ConvertToSeconds(timeList[-3])
-        individualResult[HALF] = numSec
+        if len(timeList) > 0:
+            numSec = self.ConvertToSeconds(timeList[-1])
+            individualResult[FULL] = numSec
+        if len(timeList) > 2:
+            numSec = self.ConvertToSeconds(timeList[-3])
+            individualResult[HALF] = numSec
 
         # Save the final result and tally up their total time
         self.result = individualResult
@@ -269,6 +271,7 @@ if __name__ == "__main__":
     print(f"Grabbed {len(lines)} lines to parse")
 
     # Open output file and start parsing the input data
+    print(f"Writing to file {args.output}")
     ofh = open(args.output, 'w')
     ofh.write(DopeyParticipant.GetCSVHeader(args.separator) if args.dopey else GoofyParticipant.GetCSVHeader(args.separator))
     ofh.write("\n")
@@ -284,6 +287,7 @@ if __name__ == "__main__":
                 part = DopeyParticipant(line)
             else:
                 part = GoofyParticipant(line)
-            ofh.write(part.GetCSVLine(args.separator)+"\n")
+            if part.valid:
+                ofh.write(part.GetCSVLine(args.separator)+"\n")
     ofh.close()
     print(f"Successfully exported data to csv")
