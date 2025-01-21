@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import re, sys, argparse, time
 
 DEBUG = False
@@ -16,7 +17,7 @@ class Partcipant():
         self.age = 0
         self.sex = "NA"
         self.origin = "Unknown"
-
+        self.valid = False
         self.line = line
 
         # Break the line into three parts - whats before the times, what's after, and the times themselves
@@ -84,6 +85,9 @@ class Partcipant():
         else:
             return 0
 
+    def GetHoursMinutesSeconds(self, seconds) -> str:
+        return time.strftime('%H:%M:%S', time.gmtime(seconds))
+
     def ParseTimes(self, times : str):
         print("Base class call")
         self.result = {FIVEK : 0, TENK : 0, HALF : 0, FULL : 0, TOTAL_TIME : 0}
@@ -92,27 +96,35 @@ class Partcipant():
         print("Base class call")
         return ""
 
+    @staticmethod
+    def GetCSVHeader(separator : str) -> str:
+        return ""
+
 class GoofyParticipant(Partcipant):
     def ParseTimes(self, times : str):
         # Take the time string and parse out all the times. Goofy has clock/net/clock/net, so grab #2 and #4 (1,3)
         individualResult = {HALF : 0, FULL : 0, TOTAL_TIME : 0}
         pattern = r"(\d+):(\d+):(\d+)"
         timeStr = times
+        timeList = []
         res = re.split(pattern, timeStr)
         matches = list(re.finditer(pattern, timeStr))
         if matches:
             last_match = matches[-1]
             start_pos = last_match.start()
             end_pos = last_match.end()
-            times = timeStr[0:end_pos].split(" ")
+            timeList = timeStr[0:end_pos].split(" ")
+            self.valid = True
         else:
-            # no match, meaning it isn't there. this should never happen based on previous checks
-            raise("error - unknown value in string field")
-            pass
+            # no match, meaning it isn't there. this could happen if no half/full times are there, in which case
+            # we should ignore this line as they aren't a full finisher of goofy
+            print(f"Bad line to parse times from {self.line}\n{times}")
+            for x in range(0,4):
+                timeList.append('0:0:0')
 
-        numSec = self.ConvertToSeconds(times[-1])
+        numSec = self.ConvertToSeconds(timeList[-1])
         individualResult[FULL] = numSec
-        numSec = self.ConvertToSeconds(times[-3])
+        numSec = self.ConvertToSeconds(timeList[-3])
         individualResult[HALF] = numSec
 
         # Save the final result and tally up their total time
@@ -120,12 +132,22 @@ class GoofyParticipant(Partcipant):
         self.result[TOTAL_TIME] = self.result[HALF] + self.result[FULL]
 
     def GetCSVLine(self, separator : str) -> str:
-        dataList = [self.name, self.age, self.sex, self.origin, self.result[HALF], self.result[FULL], self.result[TOTAL_TIME]]
+        dataList = [self.name, self.age, self.sex, self.origin,
+                    self.result[HALF], self.GetHoursMinutesSeconds(self.result[HALF]),
+                    self.result[FULL], self.GetHoursMinutesSeconds(self.result[FULL]),
+                    self.result[TOTAL_TIME], self.GetHoursMinutesSeconds(self.result[TOTAL_TIME])]
+
         ostring = ""
         for item in dataList[:-1]:
             ostring += f"{item}{separator}"
         ostring += f"{dataList[-1]}"
         return ostring
+
+    @staticmethod
+    def GetCSVHeader(separator: str) -> str:
+        return (f"Name{separator}Age{separator}Gender{separator}Location{separator}"
+                f"Half Seconds{separator}Half Time{separator}Full Seconds{separator}"
+                f"Full Time{separator}Combined Seconds{separator}Combined Time")
 
 class DopeyParticipant(Partcipant):
     def ParseTimes(self, times : str):
@@ -138,45 +160,64 @@ class DopeyParticipant(Partcipant):
         timeStr = times
         res = re.split(pattern, timeStr)
         matches = list(re.finditer(pattern, timeStr))
+        timeList = []
         if matches:
             last_match = matches[-1]
             start_pos = last_match.start()
             end_pos = last_match.end()
-            times = timeStr[0:end_pos].split(" ")
+            timeList = timeStr[0:end_pos].split(" ")
+            self.valid = True
         else:
-            # no match, meaning it isn't there. this should never happen based on previous checks
-            raise("error - unknown value in string field")
-            pass
+            # no match, meaning it isn't there. this could happen if no half/full times are there, in which case
+            # we should ignore this line as they aren't a full finisher of dopey
+            print(f"Bad line to parse times from {self.line}\n{times}")
+            for x in range(0,4):
+                timeList.append('0:0:0')
 
         # Go backwards through the list, assuming full and half are ones always written in PDF
         # Why? Because in 2025 people had their bibs not working for the 5k or 10k, but were fixed in
         # half and full. This script does not accound for these issues completely. Excel is your friend
         # for that
-        if len(times) > 0:
-            numSec = self.ConvertToSeconds(times[-1])
+        if len(timeList) > 0:
+            numSec = self.ConvertToSeconds(timeList[-1])
             individualResult[FULL] = numSec
-        if len(times) > 1:
-            numSec = self.ConvertToSeconds(times[-2])
+        if len(timeList) > 1:
+            numSec = self.ConvertToSeconds(timeList[-2])
             individualResult[HALF] = numSec
-        if len(times) > 2:
-            numSec = self.ConvertToSeconds(times[-3])
+        if len(timeList) > 2:
+            numSec = self.ConvertToSeconds(timeList[-3])
             individualResult[TENK] = numSec
-        if len(times) > 3:
-            numSec = self.ConvertToSeconds(times[-4])
+        if len(timeList) > 3:
+            numSec = self.ConvertToSeconds(timeList[-4])
             individualResult[FIVEK] = numSec
 
         # Save the final result and tally up their total time
         self.result = individualResult
         self.result[TOTAL_TIME] = self.result[FIVEK] + self.result[TENK] + self.result[HALF] + self.result[FULL]
 
+    @staticmethod
+    def GetCSVHeader(separator : str) -> str:
+        return (f"Name{separator}Age{separator}Gender{separator}Location{separator}"
+                f"5k Seconds{separator}5k Time{separator}"
+                f"10k Seconds{separator}10k Time{separator}"
+                f"Half Seconds{separator}Half Time{separator}"
+                f"Full Seconds{separator}Full Time{separator}"
+                f"Combined Seconds{separator}Combined Time")
+
     def GetCSVLine(self, separator : str) -> str:
-        dataList = [self.name, self.age, self.sex, self.origin, self.result[FIVEK], self.result[TENK],
-                    self.result[HALF], self.result[FULL], self.result[TOTAL_TIME]]
+        dataList = [self.name, self.age, self.sex, self.origin,
+                    self.result[FIVEK], self.GetHoursMinutesSeconds(self.result[FIVEK]),
+                    self.result[TENK], self.GetHoursMinutesSeconds(self.result[TENK]),
+                    self.result[HALF], self.GetHoursMinutesSeconds(self.result[HALF]),
+                    self.result[FULL], self.GetHoursMinutesSeconds(self.result[FULL]),
+                    self.result[TOTAL_TIME], self.GetHoursMinutesSeconds(self.result[TOTAL_TIME])]
         ostring = ""
         for item in dataList[:-1]:
             ostring += f"{item}{separator}"
         ostring += f"{dataList[-1]}"
         return ostring
+
+
 
 def ParsePDF(filename : str, outputfile : str = None):
     # Using pyupdf4llm, parse a PDF and get the text lines in the document/file
@@ -195,13 +236,13 @@ def ParsePDF(filename : str, outputfile : str = None):
 
 def SetupArgparse():
     # Setup Argparse for runDisney program - you can choose to evaluate a pdf or markdown file
-    parser = argparse.ArgumentParser(prog=__doc__, description="Parser for results data provided by TrackShack of runDisney Dopey Challenge. Exports a CSV for import into excel for further data analysis")
-    parser.add_argument('-t', '--times', type=int, help='Minimum number of times to look for.', default=2)
+    parser = argparse.ArgumentParser(prog=__doc__, description="Parser for results data provided by TrackShack of runDisney Dopey and Goofy Challenge. Exports a CSV for import into excel for further data analysis")
+    parser.add_argument('-t', '--times', type=int, help='Minimum number of HH:MM:SS times to look for per line (debug feature).', default=2)
     parser.add_argument('-o', '--output', type=str, help='Output file for excel formatted data', default="output/output.csv")
-    parser.add_argument('-s', '--separater', type=str, help='separater of data for csv file. default is semicolon \';\'', default=';')
-    parser.add_argument('-e', '--export', type=str, help="Export markdown of PDF parse to file specificed", default=None)
+    parser.add_argument('-s', '--separator', type=str, help='Separator of data for csv file. Default is semicolon \';\'', default=';')
+    parser.add_argument('-e', '--export', type=str, help="Export markdown of PDF parse to file specified", default=None)
 
-    group = parser.add_mutually_exclusive_group()
+    group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-m', '--markdown', type=str, help='Markdown file to parse')
     group.add_argument('-p','--pdf', type=str, help='Input PDF')
 
@@ -229,6 +270,8 @@ if __name__ == "__main__":
 
     # Open output file and start parsing the input data
     ofh = open(args.output, 'w')
+    ofh.write(DopeyParticipant.GetCSVHeader(args.separator) if args.dopey else GoofyParticipant.GetCSVHeader(args.separator))
+    ofh.write("\n")
     for line in lines:
         line = line.lstrip().rstrip()
 
@@ -241,6 +284,6 @@ if __name__ == "__main__":
                 part = DopeyParticipant(line)
             else:
                 part = GoofyParticipant(line)
-            ofh.write(part.GetCSVLine(args.separater)+"\n")
+            ofh.write(part.GetCSVLine(args.separator)+"\n")
     ofh.close()
     print(f"Successfully exported data to csv")
