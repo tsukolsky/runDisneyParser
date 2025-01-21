@@ -151,7 +151,7 @@ class DopeyParticipant(Partcipant):
         individualResult = {FIVEK : 0, TENK : 0, HALF : 0, FULL : 0, TOTAL_TIME : 0}
         timeList = times.split(' ')
         self.valid = True
-        
+
         # Go backwards through the list, assuming full and half are ones always written in PDF
         # Why? Because in 2025 people had their bibs not working for the 5k or 10k, but were fixed in
         # half and full. This script does not account for these issues completely. Excel is your friend
