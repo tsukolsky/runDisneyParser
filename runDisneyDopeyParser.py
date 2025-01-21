@@ -135,8 +135,9 @@ def ParsePDF(filename : str, outputfile : str = "tmp-markup.txt"):
         return []
 
     md_text = pdf.to_markdown(filename)
-    with open(outputfile, 'w') as ofh:
-        num = ofh.write(md_text)
+    if DEBUG:
+        with open(outputfile, 'w') as ofh:
+            num = ofh.write(md_text)
     lines = md_text.split('\n')
     return lines
 
@@ -156,7 +157,6 @@ if __name__ == "__main__":
     # Setup argparse and grab input data
     parser = SetupArgparse()
     args = parser.parse_args()
-    print(str(args))
     lines = []
     if args.markdown is not None:
         try:
@@ -186,3 +186,4 @@ if __name__ == "__main__":
                 ofh.write(f"{item}{args.delimiter}")
             ofh.write(f"{dataList[-1]}\n")
     ofh.close()
+    print(f"Successfully exported data to csv")
