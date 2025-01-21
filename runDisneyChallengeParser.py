@@ -64,26 +64,31 @@ class Partcipant():
         if matches:
             first_match = matches[0]
             start_pos = first_match.start()
-            end_pos = first_match.end()
         else:
             print(f"Error parsing string {self.lastname}, full {self.line}, middle {middleString}")
         return start_pos
 
     def GetLastTimePosition(self, middleString) -> int:
         # Get location of last time - this should be a marathon time, so three objects in hh:mm:ss
-        # TODO: Unhandled error here if there is no end_pos, but that should have been cleared by earlier parse
+        # TODO: Unhandled error here if there is no time with an hour in it...end_pos, but that should have been
+        # cleared by earlier parse
         # to validate there is enough times
         pattern = r"(\d+):(\d+):(\d+)"
-        res = re.split(pattern, middleString)
         matches = list(re.finditer(pattern, middleString))
 
         if matches:
             last_match = matches[-1]
-            start_pos = last_match.start()
             end_pos = last_match.end()
             return end_pos
         else:
-            return 0
+            # Try to find just 5k/10k type of time
+            pattern = r"(\d+):(\d+)"
+            matches = list(re.finditer(pattern, middleString))
+            if matches:
+                last_match = matches[-1]
+                end_pos = last_match.end()
+                return end_pos
+        return 0
 
     def GetHoursMinutesSeconds(self, seconds) -> str:
         return time.strftime('%H:%M:%S', time.gmtime(seconds))
@@ -100,28 +105,14 @@ class Partcipant():
     def GetCSVHeader(separator : str) -> str:
         return ""
 
-class GoofyParticipant(Partcipant):
+class ChallengeParticipant(Partcipant):
     def ParseTimes(self, times : str):
-        # Take the time string and parse out all the times. Goofy has clock/net/clock/net, so grab #2 and #4 (1,3)
+        # Take the time string and parse out all the times. Goofy and other two race challenges have
+        # clock/net/clock/net, so grab #2 and #4 (1,3)
         individualResult = {HALF : 0, FULL : 0, TOTAL_TIME : 0}
-        pattern = r"(\d+):(\d+):(\d+)"
-        timeStr = times
-        timeList = []
-        res = re.split(pattern, timeStr)
-        matches = list(re.finditer(pattern, timeStr))
-        if matches:
-            last_match = matches[-1]
-            start_pos = last_match.start()
-            end_pos = last_match.end()
-            timeList = timeStr[0:end_pos].split(" ")
-            self.valid = True
-        else:
-            # no match, meaning it isn't there. this could happen if no half/full times are there, in which case
-            # we should ignore this line as they aren't a full finisher of goofy
-            print(f"Bad line to parse times from {self.line}\n{times}")
-            for x in range(0,4):
-                timeList.append('0:0:0')
-
+        timeList = times.split(' ')
+        self.valid = True
+        
         if len(timeList) > 0:
             numSec = self.ConvertToSeconds(timeList[-1])
             individualResult[FULL] = numSec
@@ -148,8 +139,8 @@ class GoofyParticipant(Partcipant):
     @staticmethod
     def GetCSVHeader(separator: str) -> str:
         return (f"Name{separator}Age{separator}Gender{separator}Location{separator}"
-                f"Half Seconds{separator}Half Time{separator}Full Seconds{separator}"
-                f"Full Time{separator}Combined Seconds{separator}Combined Time")
+                f"Race #1 Seconds{separator}Race #1 Time{separator}Race #2 Seconds{separator}"
+                f"Race #2 Time{separator}Combined Seconds{separator}Combined Time")
 
 class DopeyParticipant(Partcipant):
     def ParseTimes(self, times : str):
@@ -158,27 +149,12 @@ class DopeyParticipant(Partcipant):
         # these last two larger times in their results. So assume* they are always there, and if one is missing
         # it's the 5k
         individualResult = {FIVEK : 0, TENK : 0, HALF : 0, FULL : 0, TOTAL_TIME : 0}
-        pattern = r"(\d+):(\d+):(\d+)"
-        timeStr = times
-        res = re.split(pattern, timeStr)
-        matches = list(re.finditer(pattern, timeStr))
-        timeList = []
-        if matches:
-            last_match = matches[-1]
-            start_pos = last_match.start()
-            end_pos = last_match.end()
-            timeList = timeStr[0:end_pos].split(" ")
-            self.valid = True
-        else:
-            # no match, meaning it isn't there. this could happen if no half/full times are there, in which case
-            # we should ignore this line as they aren't a full finisher of dopey
-            print(f"Bad line to parse times from {self.line}\n{times}")
-            for x in range(0,4):
-                timeList.append('0:0:0')
-
+        timeList = times.split(' ')
+        self.valid = True
+        
         # Go backwards through the list, assuming full and half are ones always written in PDF
         # Why? Because in 2025 people had their bibs not working for the 5k or 10k, but were fixed in
-        # half and full. This script does not accound for these issues completely. Excel is your friend
+        # half and full. This script does not account for these issues completely. Excel is your friend
         # for that
         if len(timeList) > 0:
             numSec = self.ConvertToSeconds(timeList[-1])
@@ -249,8 +225,8 @@ def SetupArgparse():
     group.add_argument('-p','--pdf', type=str, help='Input PDF')
 
     dgroup = parser.add_mutually_exclusive_group(required=True)
-    dgroup.add_argument('-g', '--goofy', action="store_true", default=False, help = "Goofy parse")
-    dgroup.add_argument('-d', '--dopey', action="store_true", default= False, help = "Dopey parse")
+    dgroup.add_argument('-c', '--challenge', action="store_true", default=False, help = "Challenge parse")
+    dgroup.add_argument('-d', '--dopey', action="store_true", default= False, help = "Dopey specific parse")
     return parser
 
 if __name__ == "__main__":
@@ -273,7 +249,8 @@ if __name__ == "__main__":
     # Open output file and start parsing the input data
     print(f"Writing to file {args.output}")
     ofh = open(args.output, 'w')
-    ofh.write(DopeyParticipant.GetCSVHeader(args.separator) if args.dopey else GoofyParticipant.GetCSVHeader(args.separator))
+    ofh.write(DopeyParticipant.GetCSVHeader(args.separator) if args.dopey else
+              ChallengeParticipant.GetCSVHeader(args.separator))
     ofh.write("\n")
     for line in lines:
         line = line.lstrip().rstrip()
@@ -286,7 +263,7 @@ if __name__ == "__main__":
             if args.dopey:
                 part = DopeyParticipant(line)
             else:
-                part = GoofyParticipant(line)
+                part = ChallengeParticipant(line)
             if part.valid:
                 ofh.write(part.GetCSVLine(args.separator)+"\n")
     ofh.close()
